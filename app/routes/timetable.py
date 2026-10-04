@@ -1,10 +1,14 @@
 import csv
+import io
+import re
 
 import requests
+from bs4 import BeautifulSoup
 from flasgger import swag_from
 from flask import Blueprint, jsonify, request
 
 from app.docs.swagger import swagger_timetable_spec
+from app.utils.portal import authenticated_cookie_jar, upstream_url
 from app.utils.token_required import require_token_auth
 from config import Config
 
@@ -19,36 +23,43 @@ def timetable():
         "User-Agent": Config.USER_AGENT,
     }
 
-    cookie = {Config.COOKIE_KEY: request.headers["Authorization"]}
     response = requests.get(
-        f"{Config.BASE_URL}/student/timetable?format=csv&yt0=",
+        upstream_url("/student/timetable?format=csv&yt0="),
         headers=headers,
-        cookies=cookie,
+        cookies=authenticated_cookie_jar(),
+        timeout=Config.REQUEST_TIMEOUT,
     )
+    soup = BeautifulSoup(response.text, "html.parser")
+    if "/user/login" in response.url or soup.select_one('input[name="LoginForm[username]"]') or (soup.title and "login" in soup.title.get_text().lower()):
+        return jsonify({"message": "Token expired. Please login again."}), 401
     if response.status_code == 200:
         csv_data = response.text
 
         timetable = {}
 
-        csv_reader = csv.reader(csv_data.splitlines(), delimiter=",", quotechar='"')
-        headers = next(csv_reader)
-        next(csv_reader)
+        csv_reader = csv.reader(io.StringIO(csv_data))
+        days = {"monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"}
 
         for row in csv_reader:
-            day = row[0]
-            timetable[day.lower()] = {}
+            if not row:
+                continue
+            day = row[0].strip().splitlines()[0].lower()
+            if day not in days:
+                continue
+            timetable[day] = {}
 
             for i, period in enumerate(row[1:], start=1):
                 period_name = f"period-{i}"
-                period_data = {"name": period.strip()}
+                parts = re.split(r"<br\s*/?>\s*\[\s*[^]]+\s*\]\s*<br\s*/?>", period, maxsplit=1, flags=re.I)
+                period_data = {"name": BeautifulSoup(parts[0], "html.parser").get_text(" ", strip=True)}
 
-                if "<br/>[ Theory ]<br/>" in period:
-                    parts = period.split("<br/>[ Theory ]<br/>")
-                    period_data["name"] = parts[0].strip()
-                    period_data["teacher"] = parts[1].strip()
+                if len(parts) == 2:
+                    period_data["teacher"] = BeautifulSoup(parts[1], "html.parser").get_text(" ", strip=True)
 
-                timetable[day.lower()][period_name] = period_data
+                timetable[day][period_name] = period_data
 
+        if not timetable:
+            return jsonify({"message": "Time table data not found"}), 404
         return jsonify(timetable), 200
     else:
         return jsonify({"message": "Time table data not found"}), 404

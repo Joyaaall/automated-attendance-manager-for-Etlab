@@ -4,6 +4,7 @@ from flasgger import swag_from
 from flask import Blueprint, jsonify, request
 
 from app.docs.swagger import swagger_logout_spec
+from app.utils.portal import authenticated_cookie_jar, upstream_url
 from app.utils.token_required import require_token_auth
 from config import Config
 
@@ -17,14 +18,15 @@ def logout():
     headers = {
         "User-Agent": Config.USER_AGENT,
     }
-    cookie = {Config.COOKIE_KEY: request.headers["Authorization"]}
     response = requests.get(
-        f"{Config.BASE_URL}/user/logout",
+        upstream_url("/user/logout"),
         headers=headers,
-        cookies=cookie,
+        cookies=authenticated_cookie_jar(),
+        timeout=Config.REQUEST_TIMEOUT,
     )
+    response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
-    if "login" in soup.title.string.lower():
+    if "/user/login" in response.url or soup.select_one('input[name="LoginForm[username]"]') or (soup.title and "login" in soup.title.get_text().lower()):
         return (
             jsonify({"message": "Logged out successfully"}),
             200,

@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.env
+.env.*
+*cookies*
+*.log
+.pytest_cache
+node_modules
+test-results

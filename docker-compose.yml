@@ -1,6 +1,9 @@
-version: "3.8"
+name: etlab-asiet
+
 services:
-  rit-etlab-api:
+  etlab-asiet:
+    image: etlab-asiet
+    container_name: etlab-asiet
     build: .
     ports:
-      - "8000:8000"
+      - "0.0.0.0:5000:8000"

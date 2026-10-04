@@ -4,6 +4,7 @@ from flasgger import swag_from
 from flask import Blueprint, jsonify, request
 
 from app.docs.swagger import swagger_present_spec
+from app.utils.portal import authenticated_cookie_jar, upstream_url
 from app.utils.token_required import require_token_auth
 from config import Config
 
@@ -31,23 +32,23 @@ def present():
         "User-Agent": Config.USER_AGENT,
     }
 
-    cookie = {Config.COOKIE_KEY: request.headers["Authorization"]}
+
     payload = {
         "month": month,
-        "semester": (8 + semester),
+        "semester": semester,
         "year": year,
     }
     response = requests.post(
-        f"{Config.BASE_URL}/ktuacademics/student/attendance",
+        upstream_url("/ktuacademics/student/attendance"),
         headers=headers,
-        cookies=cookie,
+        cookies=authenticated_cookie_jar(),
         data=payload,
+        timeout=Config.REQUEST_TIMEOUT,
     )
-    if response.status_code != 200:
-        return jsonify({"message": "Failed to fetch data"}), 500
+    response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
-    if "login" in soup.title.string.lower():
+    if "/user/login" in response.url or soup.select_one('input[name="LoginForm[username]"]') or (soup.title and "login" in soup.title.get_text().lower()):
         return jsonify({"message": "Token expired. Please login again."}), 401
 
     try:
@@ -81,17 +82,17 @@ def present():
                 continue
 
             for hour, col in enumerate(cols, start=1):
-                if "present" in col.get("class"):
+                if "present" in (col.get("class") or []):
                     present_hour_data = {}
                     suffixes = ["st", "nd", "rd", "th"]
                     if day.endswith(tuple(suffixes)):
                         day = day[:-2]
                     present_hour_data["day"] = int(day)
                     present_hour_data["hour"] = hour
-                    present_hour_data["subject_code"] = col.text.split("-")[0].strip()
-                    present_hour_data["subject_name"] = (
-                        col.text.split("-")[1].strip().split("\n")[0].strip()
-                    )
+                    subject = col.get_text("\n", strip=True).splitlines()[0]
+                    code, separator, name = subject.partition(" - ")
+                    present_hour_data["subject_code"] = code.strip()
+                    present_hour_data["subject_name"] = name.strip() if separator else ""
                     present_hours_data.append(present_hour_data)
 
         respone_dict = {
@@ -106,6 +107,5 @@ def present():
             jsonify({"message": "Successfully fetched data", "data": respone_dict}),
             200,
         )
-    except Exception as e:
-        print(e)
-        return jsonify({"message": "Failed to parse data"}), 500
+    except (AttributeError, IndexError, TypeError, ValueError):
+        return jsonify({"message": "Unexpected Etlab attendance page structure."}), 502

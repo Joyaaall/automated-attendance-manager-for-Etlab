@@ -93,6 +93,7 @@ swagger_login_spec = {
             "schema": {
                 "type": "object",
                 "properties": {
+                    "portal_url": {"type": "string", "description": "College Etlab address, with or without https://"},
                     "username": {"type": "string", "description": "User's username"},
                     "password": {"type": "string", "description": "User's password"},
                 },
@@ -430,9 +431,9 @@ swagger_config = {
     "static_url_path": "/flasgger_static",
     "swagger_ui": True,
     "specs_route": "/apidocs/",
-    "title": "RIT ETLAB portal API",
+    "title": "Etlab Attendance Manager API",
     "version": "1.0",
-    "description": "Unoffical API for RIT ETLAB portal",
+    "description": "Unofficial API for compatible etlab.app and etlab.in college portals. Login returns a portal-bound token for Authorization (raw or Bearer).",
 }
 
 swagger_absent_spec = {

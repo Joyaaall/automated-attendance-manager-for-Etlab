@@ -1,0 +1,12 @@
+{
+  "name": "etlab-attendance-manager-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/api-client.test.mjs tests/attendance-math.test.mjs",
+    "test:browser": "node --test tests/browser.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
